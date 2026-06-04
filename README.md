@@ -64,7 +64,7 @@ Outline requires an OAuth authentication provider. You'll need to set up one of 
 
 #### Versions
 
-In the example we are setting-up the latest version of Outline, currently the v0.86.1. Outline's default branch, `main`, is considered in development and may be broken at any time, so always use a [release tag](https://github.com/outline/outline/releases) to deploy a stable version. 
+In the example we are setting-up the latest version of Outline, currently the v1.8.0. Outline's default branch, `main`, is considered in development and may be broken at any time, so always use a [release tag](https://github.com/outline/outline/releases) to deploy a stable version. 
 
 
 ### Using Clever Tools CLI
@@ -81,10 +81,10 @@ export ORGANISATION=<ORGANISATION>
 export CC_DOMAIN=<YOUR_DOMAIN_NAME>
 
 # Get the latest release of Outline
-wget https://github.com/outline/outline/archive/refs/tags/v1.5.0.tar.gz
+wget https://github.com/outline/outline/archive/refs/tags/v1.8.0.tar.gz
 
 # Extract the release in the current folder
-tar -xvzf v1.5.0.tar.gz --strip-components=1
+tar -xvzf v1.8.0.tar.gz --strip-components=1
 
 # Re-initialize the git repository
 git init
@@ -125,7 +125,7 @@ echo "Domain $CC_DOMAIN"
 clever env set NODE_ENV production
 clever env set PORT 8080
 clever env set CC_NODE_DEV_DEPENDENCIES install
-clever env set CC_POST_BUILD_HOOK "NODE_ENV=production && yarn build"
+clever env set CC_POST_BUILD_HOOK "NODE_ENV=production && yarn build && yarn db:migrate"
 clever env set WEB_CONCURRENCY 2
 clever env set SECRET_KEY $( openssl rand -hex 32 )
 clever env set UTILS_SECRET $( openssl rand -hex 32 )
