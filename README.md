@@ -5,189 +5,163 @@
 [![Outline – Team knowledge base & wiki](https://img.shields.io/badge/Outline-Team%20knowledge%20base%20%26%20wiki-blue)](https://www.getoutline.com/)
 [![Clever Cloud - PaaS](https://img.shields.io/badge/Clever%20Cloud-PaaS-orange)](https://clever-cloud.com)
 
-## Overview
+Deploy [Outline](https://www.getoutline.com/), a collaborative knowledge base and wiki, on Clever Cloud with the Linux runtime, [Mise](https://mise.jdx.dev/), PostgreSQL, Redis, and Cellar S3-compatible object storage.
 
-This repository provides a complete guide for deploying [Outline](https://www.getoutline.com/) - a modern team knowledge base and wiki - on [Clever Cloud](https://clever-cloud.com), a European PaaS provider.
-
-Outline is an open-source knowledge base that helps teams organize and share information with a beautiful, intuitive interface. By deploying on Clever Cloud, you get a reliable, scalable hosting solution with minimal maintenance overhead.
+This example was tested with Outline `v1.9.2`. Mise downloads the selected release during the build phase, so the repository only contains the deployment configuration. Outline recommends Docker for self-hosted installations, but it also [documents installation from source](https://docs.getoutline.com/s/hosting/doc/from-source-BlBxrNzMIP).
 
 ## Prerequisites
 
-- A [Clever Cloud](https://www.clever-cloud.com/) account
-- [Clever Tools CLI](https://github.com/CleverCloud/clever-tools) installed and configured
-- Basic familiarity with command line operations
-- A domain name (optional, but recommended for production use)
-- Authentication provider setup (Slack, Google, etc.) - see [Authentication Setup](#authentication-setup)
+- A [Clever Cloud account](https://console.clever-cloud.com/)
+- [Clever Tools](https://www.clever.cloud/developers/doc/cli/) configured for that account
+- [curl](https://curl.se/)
+- [Git](https://git-scm.com/downloads)
+- [OpenSSL](https://openssl-library.org/)
+- [s3cmd](https://s3tools.org/s3cmd)
+- An [authentication provider supported by Outline](#configure-authentication)
 
-## Architecture
+## Prepare the repository
 
-This deployment consists of the following components:
-
-- **Outline application**: Node.js application running the wiki application
-- **PostgreSQL database**: Stores all wiki content, users, and metadata
-- **Redis cache**: Handles sessions, caching, and background job queues
-- **File storage**: Clever Cloud S3-compatible bucket for document attachments and images
-- **OAuth provider**: External authentication service (Slack, Google, etc.)
-
-## Deployment Guide
-
-### Before You Begin
-
-Before starting the deployment process, you'll need to define the following values:
-
-- `<ORGANISATION>` with the name of your organisation where the Outline instance will be deployed
-- `<APP_NAME>` with your chosen application name
-- `<YOUR_DOMAIN_NAME>` with your domain name (if applicable)
-- `<SECRET_KEY>` with your chosen secret key for Outline
-- `<UTILS_SECRET>` with your chosen utils secret for Outline
-
-You will also need to choose an **Authentication Method**: Outline requires an OAuth provider (Slack, Google, Microsoft, etc.)
-
-### Authentication Setup
-
-Outline requires an OAuth authentication provider. You'll need to set up one of the following:
-
-#### Slack Authentication (Recommended for teams)
-1. Go to [Slack API](https://api.slack.com/apps)
-2. Create a new app for your workspace
-3. Note down the `Client ID` and `Client Secret`
-4. Set redirect URL to: `https://<YOUR_DOMAIN_NAME>/auth/slack.callback`
-
-#### Google Authentication
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Google+ API
-4. Create OAuth 2.0 credentials
-5. Set redirect URL to: `https://<YOUR_DOMAIN_NAME>/auth/google.callback`
-
-### Important Notes
-
-#### Versions
-
-In the example we are setting-up the latest version of Outline, currently the v1.8.0. Outline's default branch, `main`, is considered in development and may be broken at any time, so always use a [release tag](https://github.com/outline/outline/releases) to deploy a stable version. 
-
-
-### Using Clever Tools CLI
-
-Follow these steps to deploy Outline on Clever Cloud using the command line:
+Clone this repository:
 
 ```bash
-# Step 0: Prepare the environment
-
-export APP_NAME=<APP_NAME>
-export ORGANISATION=<ORGANISATION>
-
-# Optional: Define your domain
-export CC_DOMAIN=<YOUR_DOMAIN_NAME>
-
-# Get the latest release of Outline
-wget https://github.com/outline/outline/archive/refs/tags/v1.8.0.tar.gz
-
-# Extract the release in the current folder
-tar -xvzf v1.8.0.tar.gz --strip-components=1
-
-# Re-initialize the git repository
-git init
-git add .
-git commit -m "Initial commit"
-
-# Step 1: Create a Node application
-clever create --type node $APP_NAME --org $ORGANISATION
-clever scale --app $APP_NAME --flavor S
-
-# Add your domain
-if [ -n "$CC_DOMAIN" ]; then
-clever domain add $CC_DOMAIN
-fi
-
-# Step 2: Create required add-ons
-# - PostgreSQL database for data storage (minimum XXS plan recommended)
-clever addon create postgresql-addon --plan xxs_sml $APP_NAME-pg --org $ORGANISATION
-# - Redis for session storage and caching
-clever addon create redis-addon --plan s_mono $APP_NAME-redis --org $ORGANISATION
-# - S3 bucket for file uploads
-clever addon create cellar-addon $APP_NAME-s3 --org $ORGANISATION 
-
-# Step 3: Link add-ons to your application
-clever service link-addon $APP_NAME-pg
-clever service link-addon $APP_NAME-redis
-clever service link-addon $APP_NAME-s3
-
-# Step 4: Configure environment variables
-eval "$(clever env -F shell --alias $APP_NAME)"
-export APP_ID=`clever applications -j | jq -r ".[0].app_id"`
-: "${CC_DOMAIN=`clever curl -s https://api.clever-cloud.com/v2/self/applications/$APP_ID | jq -r ".vhosts[0].fqdn"`}"
-
-clever env set URL https://$CC_DOMAIN
-echo "Domain $CC_DOMAIN"
-
-# Common environment variables
-clever env set NODE_ENV production
-clever env set PORT 8080
-clever env set CC_NODE_DEV_DEPENDENCIES install
-clever env set CC_POST_BUILD_HOOK "NODE_ENV=production && yarn build && yarn db:migrate"
-clever env set WEB_CONCURRENCY 2
-clever env set SECRET_KEY $( openssl rand -hex 32 )
-clever env set UTILS_SECRET $( openssl rand -hex 32 )
-clever env set DEFAULT_LANGUAGE en_US
-
-# Database configuration
-clever env set DATABASE_URL $POSTGRESQL_ADDON_URI
-
-# Redis configuration (automatically set from Redis add-on)
-clever env set REDIS_URL $REDIS_URL
-
-# File storage configuration
-export BUCKET_NAME=$(clever applications -j | jq -r '.[0].app_id' | tr '_' '-')-outline
-clever env set FILE_STORAGE s3
-clever env set AWS_S3_UPLOAD_BUCKET_URL https://${CELLAR_ADDON_HOST}
-clever env set AWS_S3_UPLOAD_BUCKET_NAME $BUCKET_NAME
-clever env set AWS_ACCESS_KEY_ID $CELLAR_ADDON_KEY_ID
-clever env set AWS_SECRET_ACCESS_KEY $CELLAR_ADDON_KEY_SECRET
-clever env set AWS_S3_FORCE_PATH_STYLE true
-clever env set AWS_S3_ACL private
-clever env set AWS_REGION us-east-1
-
-# S3 initialisation
-./configure-cellar.sh
-
-# Authentication configuration (choose one)
-# For Slack authentication:
-clever env set SLACK_CLIENT_ID '<YOUR_SLACK_CLIENT_ID>'
-clever env set SLACK_CLIENT_SECRET '<YOUR_SLACK_CLIENT_SECRET>'
-
-# For Google authentication:
-# clever env set GOOGLE_CLIENT_ID '<YOUR_GOOGLE_CLIENT_ID>'
-# clever env set GOOGLE_CLIENT_SECRET '<YOUR_GOOGLE_CLIENT_SECRET>'
-
-# Optional: Email configuration for notifications
-# clever env set SMTP_HOST '<YOUR_SMTP_HOST>'
-# clever env set SMTP_PORT '<YOUR_SMTP_PORT>'
-# clever env set SMTP_USERNAME '<YOUR_SMTP_USERNAME>'
-# clever env set SMTP_PASSWORD '<YOUR_SMTP_PASSWORD>'
-# clever env set SMTP_FROM_EMAIL '<YOUR_FROM_EMAIL>'
-# clever env set SMTP_REPLY_EMAIL '<YOUR_REPLY_EMAIL>'
+git clone https://github.com/CleverCloud/outline-example.git
+cd outline-example
 ```
 
-## Deployment
+The `mise.toml` file downloads Outline, installs its dependencies, builds it, maps linked add-on variables to the names expected by Outline, and defines the `build` and `run` tasks automatically used by the Clever Cloud Linux runtime.
 
-After configuring all the environment variables, deploy your application:
+## Create the application and add-ons
+
+Create a Linux application with an alias, then create and link PostgreSQL, Redis, and Cellar add-ons:
 
 ```bash
-# Push your code to Clever Cloud
+clever create -t linux -a myOutline
+
+clever addon create postgresql-addon myOutlinePostgreSQL -p xxs_sml --link myOutline
+clever addon create redis-addon myOutlineRedis -p s_mono --link myOutline
+clever addon create cellar-addon myOutlineCellar --link myOutline
+```
+
+Clever Tools targets your personal organisation by default. To use another organisation, add `--org ORGANISATION` or `-o ORGANISATION` to commands that support it.
+
+Display the application URL. You can also add a [custom domain](https://www.clever.cloud/developers/doc/administrate/domain-names/), which requires DNS configuration:
+
+```bash
+clever domain
+clever domain add your.website.tld
+```
+
+## Configure Cellar
+
+Set the exact HTTPS origin returned by `clever domain`, without a trailing slash, and choose a globally unique bucket name containing only lowercase letters, numbers, dots, and hyphens:
+
+```bash
+export OUTLINE_URL="https://your-outline-domain.example.com"
+export OUTLINE_BUCKET="your-unique-outline-bucket"
+```
+
+Load the Cellar credentials injected by the linked add-on and run the configuration script:
+
+```bash
+source <(clever env -F shell | grep '^export CELLAR_ADDON_')
+./configure-cellar.sh
+unset CELLAR_ADDON_KEY_ID CELLAR_ADDON_KEY_SECRET CELLAR_ADDON_HOST
+```
+
+The script creates a private bucket and applies the CORS policy required for direct browser uploads from your Outline origin. Downloads remain private and use temporary URLs signed by Outline.
+
+## Configure Outline
+
+Set the tested Outline and Node.js versions. For another Outline release, select a Node.js version accepted by `engines.node` in that release's `package.json`; for example, see the [requirements for v1.9.2](https://github.com/outline/outline/blob/v1.9.2/package.json#L44-L46).
+
+```bash
+clever env set OUTLINE_VERSION v1.9.2
+clever env set CC_NODE_VERSION 26.3.0
+clever env set CC_NODE_BUILD_TOOL yarn-berry
+
+clever env set SECRET_KEY "$(openssl rand -hex 32)"
+clever env set UTILS_SECRET "$(openssl rand -base64 32)"
+clever env set NODE_ENV production
+clever env set WEB_CONCURRENCY 1
+clever env set DEFAULT_LANGUAGE en_US
+clever env set URL "$OUTLINE_URL"
+clever env set FILE_STORAGE s3
+clever env set FILE_STORAGE_UPLOAD_MAX_SIZE 262144000
+clever env set AWS_REGION default
+clever env set AWS_S3_UPLOAD_BUCKET_NAME "$OUTLINE_BUCKET"
+```
+
+`WEB_CONCURRENCY` controls the number of Outline processes started inside each application instance. Outline recommends roughly one process per 512 MB of available memory, so this example keeps the value at `1` for the default `XS` run instance. Increase it only on a larger instance and after monitoring the application's memory and CPU usage. The Mise environment also sets `REDIS_COLLABORATION_URL` from the linked Redis add-on, as required by Outline's [horizontal scaling documentation](https://docs.getoutline.com/s/hosting/doc/horizontal-scaling-hkfU5Stao7), so collaborative editing remains synchronized if you later run several processes or application instances.
+
+`DEFAULT_LANGUAGE` controls the default interface language; replace `en_US` with another [Outline language code](https://translate.getoutline.com/) if needed. `FILE_STORAGE_UPLOAD_MAX_SIZE` is expressed in bytes: `262144000` sets a 250 MiB attachment limit and matches Outline's [versioned environment sample](https://github.com/outline/outline/blob/v1.9.2/.env.sample). You can configure a larger value, but Outline applies it to the [`content-length-range` condition of each presigned S3 upload](https://github.com/outline/outline/blob/v1.9.2/server/storage/files/S3Storage.ts#L44-L67), so test the intended size with your network and storage service before increasing it. Document and workspace imports can use separate limits; see Outline's [file storage documentation](https://docs.getoutline.com/s/hosting/doc/file-storage-N4M0T6Ypu7).
+
+Outline's build needs more memory than the default build instance provides. Use an `M` build instance; the application keeps the default `XS` run instance:
+
+```bash
+clever scale --build-flavor M
+```
+
+### Configure authentication
+
+Outline needs at least one authentication method before users can sign in:
+
+| Authentication method | Required variables | Callback URL |
+| --- | --- | --- |
+| Discord | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | `$URL/auth/discord.callback` |
+| Email magic links | `SMTP_HOST` or `SMTP_SERVICE`, `SMTP_FROM_EMAIL` | — |
+| Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `$URL/auth/google.callback` |
+| Microsoft Entra ID | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | `$URL/auth/azure.callback` |
+| OpenID Connect | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ISSUER_URL` | `$URL/auth/oidc.callback` |
+| Slack | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | `$URL/auth/slack.callback` |
+
+Email magic links require a complete [SMTP configuration](https://docs.getoutline.com/s/hosting/doc/smtp-cqCJyZGMIB), including the credentials and connection settings required by your email provider.
+
+Configure the matching callback URL in your provider, then set its variables. For OpenID Connect, also allow the application URL (`$URL`) as a post-logout redirect URI if the provider exposes a logout endpoint. For example:
+
+```bash
+clever env set OIDC_CLIENT_ID "YOUR_CLIENT_ID"
+clever env set OIDC_CLIENT_SECRET "A_STRONG_CLIENT_SECRET"
+clever env set OIDC_ISSUER_URL "https://your-provider.example.com"
+clever env set OIDC_DISPLAY_NAME "Company SSO"
+```
+
+The first user to create an Outline workspace becomes its administrator. Once signed in, users can register passkeys for subsequent authentication. SAML authentication is only available in licensed editions.
+
+## Deploy Outline
+
+Deploy the application:
+
+```bash
 clever deploy
 ```
 
-## Post-Deployment
+Check that Outline can reach PostgreSQL and Redis:
 
-1. Once deployed, access your Outline instance at `https://<YOUR_DOMAIN_NAME>/`
-2. Sign in using your configured OAuth provider (Slack, Google, etc.)
-3. The first user to sign in will automatically become the admin
-4. Start creating your team's knowledge base!
+```bash
+curl "$OUTLINE_URL/_health"
+```
+
+It returns `OK` when both dependencies are available. Open the application and sign in with the authentication provider you configured:
+
+```bash
+clever open
+```
+
+## Update Outline
+
+Create a recent [PostgreSQL backup](https://www.clever.cloud/developers/doc/addons/postgresql/#database-daily-backup-and-retention) before updating. Check the target release's `engines.node` requirement, update both version variables when necessary, then rebuild without the deployment cache. For example:
+
+```bash
+clever env set OUTLINE_VERSION v1.9.2
+clever env set CC_NODE_VERSION 26.3.0
+clever restart --without-cache
+```
+
+Outline applies pending database migrations when the new version starts.
 
 ## Contributing
 
-Contributions to improve this deployment example are welcome! Please feel free to submit pull requests or open issues for any enhancements or bug fixes.
+Contributions that improve this deployment example are welcome. Open an issue or submit a pull request with your proposed changes.
 
 ## License
 
