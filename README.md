@@ -1,5 +1,3 @@
-![Clever Cloud logo](/github-assets/clever-cloud-logo.png)
-
 # Outline on Clever Cloud
 
 [![Outline – Team knowledge base & wiki](https://img.shields.io/badge/Outline-Team%20knowledge%20base%20%26%20wiki-blue)](https://www.getoutline.com/)
