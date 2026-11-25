@@ -1,0 +1,30 @@
+[tools."http:outline"]
+version = "{{ get_env(name='OUTLINE_VERSION', default='v1.9.2') }}"
+url = "https://github.com/outline/outline/archive/refs/tags/{{ version }}.tar.gz"
+strip_components = 1
+
+[env]
+DATABASE_URL = "{{ env.POSTGRESQL_ADDON_URI }}"
+REDIS_COLLABORATION_URL = "{{ env.REDIS_URL }}"
+AWS_ACCESS_KEY_ID = "{{ env.CELLAR_ADDON_KEY_ID }}"
+AWS_SECRET_ACCESS_KEY = "{{ env.CELLAR_ADDON_KEY_SECRET }}"
+AWS_S3_UPLOAD_BUCKET_URL = "https://{{ env.CELLAR_ADDON_HOST }}"
+
+[tasks.build]
+description = "Build the selected Outline release"
+run = '''
+set -euo pipefail
+mkdir outline
+cp -a '{{ tools["http:outline"].path }}/.' outline/
+cd outline
+corepack enable
+yarn install --immutable
+yarn build
+yarn workspaces focus --production
+yarn cache clean
+'''
+
+[tasks.run]
+description = "Start Outline"
+dir = "outline"
+run = "node build/server/index.js"
