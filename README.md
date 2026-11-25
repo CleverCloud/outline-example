@@ -81,10 +81,10 @@ export ORGANISATION=<ORGANISATION>
 export CC_DOMAIN=<YOUR_DOMAIN_NAME>
 
 # Get the latest release of Outline
-wget https://github.com/outline/outline/archive/refs/tags/v1.8.0.tar.gz
+wget https://github.com/outline/outline/archive/refs/tags/v1.13.0.tar.gz
 
 # Extract the release in the current folder
-tar -xvzf v1.8.0.tar.gz --strip-components=1
+tar -xvzf v1.13.0.tar.gz --strip-components=1
 
 # Re-initialize the git repository
 git init
