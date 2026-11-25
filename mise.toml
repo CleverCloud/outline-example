@@ -17,6 +17,7 @@ set -euo pipefail
 mkdir outline
 cp -a '{{ tools["http:outline"].path }}/.' outline/
 cd outline
+npm install -g corepack
 corepack enable
 yarn install --immutable
 yarn build
