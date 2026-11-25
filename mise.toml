@@ -1,5 +1,5 @@
 [tools."http:outline"]
-version = "{{ get_env(name='OUTLINE_VERSION', default='v1.9.2') }}"
+version = "{{ get_env(name='OUTLINE_VERSION', default='v1.13.0') }}"
 url = "https://github.com/outline/outline/archive/refs/tags/{{ version }}.tar.gz"
 strip_components = 1
 
